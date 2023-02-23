@@ -1582,4 +1582,90 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
     cryptoTransactionTester.test(cryptoTransaction);
   }
 
+  /**
+   * Test if interest is applied after every 5 $20+ transanctions
+   */
+  @Test
+  public void testApplyInterestEvery5Transactions() throws SQLException, ScriptException {
+    //Initialize customer1 with a balance of $1000. Balance will be represented as pennies in DB.
+    double CUSTOMER1_BALANCE = 1000;
+    int CUSTOMER1_BALANCE_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(CUSTOMER1_BALANCE);
+    MvcControllerIntegTestHelpers.addCustomerToDB(dbDelegate, CUSTOMER1_ID, CUSTOMER1_PASSWORD, CUSTOMER1_FIRST_NAME, CUSTOMER1_LAST_NAME, CUSTOMER1_BALANCE_IN_PENNIES, 0);
+
+    //Amount to deposit
+    double DEPOSIT_AMOUNT = 100;
+    // int DEPOSIT_AMOUNT_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(DEPOSIT_AMOUNT);
+
+    //Expected balance after 5 deposits and then applying interest
+    double BALANCE_INTEREST_RATE = 1.015;
+    double EXPECTED_BALANCE_WITH_5_DEPOSITS = (DEPOSIT_AMOUNT * 5) + CUSTOMER1_BALANCE;
+    double EXPECTED_BALANCE_WITH_INTEREST = EXPECTED_BALANCE_WITH_5_DEPOSITS * BALANCE_INTEREST_RATE;
+    int EXPECTED_BALANCE_WITH_INTEREST_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(EXPECTED_BALANCE_WITH_INTEREST);
+
+    //Initializing user
+    User CUSTOMER1 = new User();
+    CUSTOMER1.setUsername(CUSTOMER1_ID);
+    CUSTOMER1.setPassword(CUSTOMER1_PASSWORD);
+    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
+    CUSTOMER1.setBalance(CUSTOMER1_BALANCE);
+    CUSTOMER1.setNumDepositsForInterest(0);
+
+    // Send 5 $20+ deposits
+    for (int i = 0; i < 5; i++) {
+      controller.submitDeposit(CUSTOMER1);
+    }
+        
+    //Fetch customer1's data from DB
+    List<Map<String, Object>> customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
+    Map<String, Object> customer1Data = customer1SqlResult.get(0);
+
+    //Verify that customer1's has recieved the interest. 
+    assertEquals((EXPECTED_BALANCE_WITH_INTEREST_IN_PENNIES), (int)customer1Data.get("Balance"));
+    assertEquals(0, (int)customer1Data.get("numDepositsForInterest"));
+
+
+    // Send a $20 deposit 
+    DEPOSIT_AMOUNT = 20;
+    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(CUSTOMER1);
+
+    //Fetch customer1's data from DB
+    customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
+    customer1Data = customer1SqlResult.get(0);
+
+    //Expected balance after 6th deposit (should not add interest)
+    double EXPECTED_BALANCE_WITH_6_DEPOSITS = DEPOSIT_AMOUNT + EXPECTED_BALANCE_WITH_INTEREST;
+    int EXPECTED_BALANCE_WITH_6_DEPOSITS_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(EXPECTED_BALANCE_WITH_6_DEPOSITS);
+
+    //Verify that customer1's has recieved the deposit but no interest. 
+    assertEquals(EXPECTED_BALANCE_WITH_6_DEPOSITS_IN_PENNIES, (int)customer1Data.get("Balance"));
+    assertEquals(1, (int)customer1Data.get("numDepositsForInterest"));
+
+
+    // Send a deposit (not a $20+ deposit) 
+    DEPOSIT_AMOUNT = 19.99;
+    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(CUSTOMER1);
+
+    //Fetch customer1's data from DB
+    customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
+    customer1Data = customer1SqlResult.get(0);
+
+    //Verify that customer1's has not incremented numDepositsForInterest
+    assertEquals(1, (int)customer1Data.get("numDepositsForInterest"));
+
+
+    // Send a $20+ deposit
+    DEPOSIT_AMOUNT = 20.01;
+    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(CUSTOMER1);
+
+    //Fetch customer1's data from DB
+    customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
+    customer1Data = customer1SqlResult.get(0);
+
+    //Verify that customer1's has incremented numDepositsForInterest
+    assertEquals(2, (int)customer1Data.get("numDepositsForInterest"));
+  }
+
 }
