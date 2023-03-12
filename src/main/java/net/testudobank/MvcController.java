@@ -22,7 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @Controller
 public class MvcController {
-  
+
   // A simplified JDBC client that is injected with the login credentials
   // specified in /src/main/resources/application.properties
   private JdbcTemplate jdbcTemplate;
@@ -31,7 +31,8 @@ public class MvcController {
   private CryptoPriceClient cryptoPriceClient;
 
   // Formatter for converting Java Dates to SQL-compatible DATETIME Strings
-  private static java.text.SimpleDateFormat SQL_DATETIME_FORMATTER = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+  private static java.text.SimpleDateFormat SQL_DATETIME_FORMATTER = new java.text.SimpleDateFormat(
+      "yyyy-MM-dd HH:mm:ss");
 
   //// CONSTANT LITERALS ////
   public final static double INTEREST_RATE = 1.02;
@@ -43,6 +44,7 @@ public class MvcController {
   private final static String HTML_LINE_BREAK = "<br/>";
   public static String TRANSACTION_HISTORY_DEPOSIT_ACTION = "Deposit";
   public static String TRANSACTION_HISTORY_WITHDRAW_ACTION = "Withdraw";
+  public static String TRANSACTION_HISTORY_APPLY_INTEREST = "ApplyInterest";
   public static String TRANSACTION_HISTORY_TRANSFER_SEND_ACTION = "TransferSend";
   public static String TRANSACTION_HISTORY_TRANSFER_RECEIVE_ACTION = "TransferReceive";
   public static String TRANSACTION_HISTORY_CRYPTO_SELL_ACTION = "CryptoSell";
@@ -799,15 +801,51 @@ public class MvcController {
   }
 
   /**
-   * 
+   * Help method that adds interest to a user's balance if the user is not in overdraft and has more than $0 balance in 
+   * their account. Interest is only added for every 5 deposits of atleast $20.
    * 
    * @param user
-   * @return "account_info" if interest applied. Otherwise, redirect to "welcome" page.
+   * @return "account_info" if interest applied. Otherwise, redirect to "welcome"
+   *         page.
    */
   public String applyInterest(@ModelAttribute("user") User user) {
+    String userID = user.getUsername();
+    double userDepositAmt = user.getAmountToDeposit();
+    int userDepositAmtInPennies = convertDollarsToPennies(userDepositAmt);
+    double userBalance = user.getBalance();
+    int userNumDepositsForInterest = TestudoBankRepository.getCustomerNumberOfDepositsForInterest(jdbcTemplate, userID);
+    String currentTime = SQL_DATETIME_FORMATTER.format(new java.util.Date());
 
-    return "welcome";
+    // check if customer is overdraft
+    int userOverdraftAmount = TestudoBankRepository.getCustomerOverdraftBalanceInPennies(jdbcTemplate, userID);
+    if (userOverdraftAmount > 0) {
+      return "welcome";
+    }
 
+    // check if customer has no balance
+    if (!(userBalance > 0)) {
+      return "welcome";
+    }
+
+    // check if the deposit less than 20 dollars
+    if (userDepositAmtInPennies < convertDollarsToPennies(20)) {
+      return "welcome";
+    }
+
+    userNumDepositsForInterest++; // increment amount of deposits for interest by 1
+    TestudoBankRepository.setCustomerNumberOfDepositsForInterest(jdbcTemplate, userID, userNumDepositsForInterest);
+
+    // check if the customer has made 5 20+ dollar deposits to add interest to balance
+    if (userNumDepositsForInterest == 5) {
+      double userBalanceAmtWithInterest = BALANCE_INTEREST_RATE * (userBalance + userDepositAmt);
+      int userBalanceAmtWithInterestinPennies = convertDollarsToPennies(userBalanceAmtWithInterest);
+      TestudoBankRepository.setCustomerCashBalance(jdbcTemplate, userID, userBalanceAmtWithInterestinPennies);
+      TestudoBankRepository.setCustomerNumberOfDepositsForInterest(jdbcTemplate, userID, 0);
+      TestudoBankRepository.insertRowToTransactionHistoryTable(jdbcTemplate, userID, currentTime,
+          TRANSACTION_HISTORY_APPLY_INTEREST, userBalanceAmtWithInterestinPennies);
+      return "account_info";
+    } else {
+      return "welcome";
+    }
   }
-
 }
