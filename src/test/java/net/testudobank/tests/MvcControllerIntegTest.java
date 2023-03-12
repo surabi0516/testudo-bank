@@ -1594,7 +1594,6 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
 
     //Amount to deposit
     double DEPOSIT_AMOUNT = 100;
-    // int DEPOSIT_AMOUNT_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(DEPOSIT_AMOUNT);
 
     //Expected balance after 5 deposits and then applying interest
     double BALANCE_INTEREST_RATE = 1.015;
@@ -1603,17 +1602,19 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
     int EXPECTED_BALANCE_WITH_INTEREST_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(EXPECTED_BALANCE_WITH_INTEREST);
 
     //Initializing user
-    User CUSTOMER1 = new User();
-    CUSTOMER1.setUsername(CUSTOMER1_ID);
-    CUSTOMER1.setPassword(CUSTOMER1_PASSWORD);
-    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
-    CUSTOMER1.setBalance(CUSTOMER1_BALANCE);
-    CUSTOMER1.setNumDepositsForInterest(0);
+    User customerOneDataMap = new User();
+    customerOneDataMap.setUsername(CUSTOMER1_ID);
+    customerOneDataMap.setPassword(CUSTOMER1_PASSWORD);
+    customerOneDataMap.setAmountToDeposit(DEPOSIT_AMOUNT);
+    customerOneDataMap.setBalance(CUSTOMER1_BALANCE);
+    customerOneDataMap.setNumDepositsForInterest(0);
 
     // Send 5 $20+ deposits
-    for (int i = 0; i < 5; i++) {
-      controller.submitDeposit(CUSTOMER1);
-    }
+    controller.submitDeposit(customerOneDataMap);
+    controller.submitDeposit(customerOneDataMap);
+    controller.submitDeposit(customerOneDataMap);
+    controller.submitDeposit(customerOneDataMap);
+    controller.submitDeposit(customerOneDataMap);
         
     //Fetch customer1's data from DB
     List<Map<String, Object>> customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
@@ -1626,8 +1627,8 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
 
     // Send a $20 deposit 
     DEPOSIT_AMOUNT = 20;
-    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
-    controller.submitDeposit(CUSTOMER1);
+    customerOneDataMap.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(customerOneDataMap);
 
     //Fetch customer1's data from DB
     customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
@@ -1644,8 +1645,8 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
 
     // Send a deposit (not a $20+ deposit) 
     DEPOSIT_AMOUNT = 19.99;
-    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
-    controller.submitDeposit(CUSTOMER1);
+    customerOneDataMap.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(customerOneDataMap);
 
     //Fetch customer1's data from DB
     customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
@@ -1657,8 +1658,8 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
 
     // Send a $20+ deposit
     DEPOSIT_AMOUNT = 20.01;
-    CUSTOMER1.setAmountToDeposit(DEPOSIT_AMOUNT);
-    controller.submitDeposit(CUSTOMER1);
+    customerOneDataMap.setAmountToDeposit(DEPOSIT_AMOUNT);
+    controller.submitDeposit(customerOneDataMap);
 
     //Fetch customer1's data from DB
     customer1SqlResult = jdbcTemplate.queryForList(String.format("SELECT * FROM Customers WHERE CustomerID='%s';", CUSTOMER1_ID));
