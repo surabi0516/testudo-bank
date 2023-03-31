@@ -1582,4 +1582,96 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
     cryptoTransactionTester.test(cryptoTransaction);
   }
 
+  /**
+   * Test when a customer with no pre-existing Crypto buys ETH, buys SOL, and sells their SOL.
+   */
+  @Test
+  public void testCryptoBuyEthBuySolSellUserFlow() throws ScriptException {
+    CryptoTransactionTester cryptoTransactionTester = CryptoTransactionTester.builder()
+      .initialBalanceInDollars(1000)
+      .initialCryptoBalance(Collections.singletonMap("ETH", 0.0))
+      .build();
+
+    cryptoTransactionTester.initialize();
+
+    CryptoTransaction buyEth = CryptoTransaction.builder()
+      .expectedEndingBalanceInDollars(900)
+      .expectedEndingCryptoBalance(0.1)
+      .cryptoPrice(1000)
+      .cryptoAmountToTransact(0.1)
+      .cryptoName("ETH")
+      .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+      .shouldSucceed(true)
+      .build();
+    cryptoTransactionTester.test(buyEth);
+
+    CryptoTransaction buySol = CryptoTransaction.builder()
+      .expectedEndingBalanceInDollars(800)
+      .expectedEndingCryptoBalance(0.1)
+      .cryptoPrice(1000)
+      .cryptoAmountToTransact(0.1)
+      .cryptoName("SOL")
+      .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+      .shouldSucceed(true)
+      .build();
+    cryptoTransactionTester.test(buySol);
+
+    CryptoTransaction sellSol = CryptoTransaction.builder()
+      .expectedEndingBalanceInDollars(900)
+      .expectedEndingCryptoBalance(0)
+      .cryptoPrice(1000)
+      .cryptoAmountToTransact(0.1)
+      .cryptoName("SOL")
+      .cryptoTransactionTestType(CryptoTransactionTestType.SELL)
+      .shouldSucceed(true)
+      .build();
+    cryptoTransactionTester.test(sellSol);
+  }
+
+  /**
+   * Test that ensures that the "welcome" page is returned when a user attempts to put "BTC" 
+   * as the crypto name in the front-end when filling out the CryptoBuy form.
+   */
+  @Test
+  public void testCryptoBuyBtcInvalidCase() throws ScriptException {
+    CryptoTransactionTester cryptoTransactionTester = CryptoTransactionTester.builder()
+      .initialBalanceInDollars(1000)
+      .build();
+
+    cryptoTransactionTester.initialize();
+
+    CryptoTransaction buyBtc = CryptoTransaction.builder()
+      .expectedEndingBalanceInDollars(1000)
+      .expectedEndingCryptoBalance(0)
+      .cryptoPrice(1000)
+      .cryptoAmountToTransact(0.1)
+      .cryptoName("BTC")
+      .shouldSucceed(false)
+      .build();
+    cryptoTransactionTester.test(buyBtc);
+  }
+
+  /**
+   * Test that ensures that the "welcome" page is returned when a user attempts to put "BTC" 
+   * as the crypto name in the front-end when filling out the CryptoSell form. 
+   */
+  @Test
+  public void testCryptoSellBtcInvalidCase() throws ScriptException {
+    CryptoTransactionTester cryptoTransactionTester = CryptoTransactionTester.builder()
+      .initialBalanceInDollars(1000)
+      .build();
+
+    cryptoTransactionTester.initialize();
+
+    CryptoTransaction sellSol = CryptoTransaction.builder()
+      .expectedEndingBalanceInDollars(1000)
+      .expectedEndingCryptoBalance(0)
+      .cryptoPrice(1000)
+      .cryptoAmountToTransact(0.1)
+      .cryptoName("BTC")
+      .cryptoTransactionTestType(CryptoTransactionTestType.SELL)
+      .shouldSucceed(false)
+      .build();
+    cryptoTransactionTester.test(sellSol);
+  }
 }
