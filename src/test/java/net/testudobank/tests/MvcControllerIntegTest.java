@@ -10,6 +10,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import java.lang.Thread;
+
 import javax.script.ScriptException;
 
 import lombok.AllArgsConstructor;
@@ -1314,7 +1316,6 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
         }
 
         numTransactions++;
-
       }
     }
   }
@@ -1673,5 +1674,70 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
       .shouldSucceed(false)
       .build();
     cryptoTransactionTester.test(sellSol);
+  }
+
+
+  /**
+   * Test simple adding interest to accounts that had a valid monthly crypto buy
+   * and not adding interest to an account that did not have a monthly crypto buy
+   */
+  @Test
+  public void testCryptoApplyInterest() throws ScriptException, InterruptedException {
+    CryptoTransactionTester cryptoTransactionTester = CryptoTransactionTester.builder()
+            .initialBalanceInDollars(1000)
+            .initialCryptoBalance(Collections.singletonMap("ETH", 0.0))
+            .build();
+    cryptoTransactionTester.initialize();
+
+    CryptoTransaction cryptoFirstEthBuy = CryptoTransaction.builder()
+            .expectedEndingBalanceInDollars(900)
+            .expectedEndingCryptoBalance(0.1)
+            .cryptoPrice(1000)
+            .cryptoAmountToTransact(0.1)
+            .cryptoName("ETH")
+            .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+            .shouldSucceed(true)
+            .build();
+    cryptoTransactionTester.test(cryptoFirstEthBuy);
+
+    CryptoTransaction cryptoFirstSolBuy = CryptoTransaction.builder()
+            .expectedEndingBalanceInDollars(800)
+            .expectedEndingCryptoBalance(0.1)
+            .cryptoPrice(1000)
+            .cryptoAmountToTransact(0.1)
+            .cryptoName("SOL")
+            .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+            .shouldSucceed(true)
+            .build();
+    cryptoTransactionTester.test(cryptoFirstSolBuy);
+
+    long monthInMilliSecs = 2_629_746_000L;
+    Thread.sleep(monthInMilliSecs);
+
+    CryptoTransaction cryptoSecondEthBuy = CryptoTransaction.builder()
+            .expectedEndingBalanceInDollars(700)
+            // this transaction intitates the addition interest from last month
+            .expectedEndingCryptoBalance(0.2015)
+            .cryptoPrice(1000)
+            .cryptoAmountToTransact(0.1)
+            .cryptoName("ETH")
+            .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+            .shouldSucceed(true)
+            .build();
+    cryptoTransactionTester.test(cryptoSecondEthBuy);
+
+    CryptoTransaction cryptoSecondSolBuy = CryptoTransaction.builder()
+            .expectedEndingBalanceInDollars(700)
+            // this transaction shoule fail, meaning the total SOL balance should not change,
+            // and crypto interest should not be added
+            .expectedEndingCryptoBalance(0.1)
+            .cryptoPrice(1000)
+            .cryptoAmountToTransact(0.1)
+            .cryptoName("SOL")
+            .cryptoTransactionTestType(CryptoTransactionTestType.BUY)
+            .shouldSucceed(false)
+            .build();
+    cryptoTransactionTester.test(cryptoSecondSolBuy);
+
   }
 }
