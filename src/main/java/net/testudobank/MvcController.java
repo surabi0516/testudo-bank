@@ -17,6 +17,7 @@ import java.util.List;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.HashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -49,8 +50,10 @@ public class MvcController {
   public static String TRANSACTION_HISTORY_CRYPTO_BUY_ACTION = "CryptoBuy";
   public static String CRYPTO_HISTORY_SELL_ACTION = "Sell";
   public static String CRYPTO_HISTORY_BUY_ACTION = "Buy";
+  public static String CRYPTO_HISTORY_APPLY_INTEREST_ACTION = "ApplyInterest";
   public static Set<String> SUPPORTED_CRYPTOCURRENCIES = new HashSet<>(Arrays.asList("ETH", "SOL"));
   private static double BALANCE_INTEREST_RATE = 1.015;
+  private static HashMap<String, String> LAST_CRYPTO_PURCHASE_DATE_BY_SUPPORTED_CRYPTOCURRENCIES = new HashMap<String, String>();
 
   public MvcController(@Autowired JdbcTemplate jdbcTemplate, @Autowired CryptoPriceClient cryptoPriceClient) {
     this.jdbcTemplate = jdbcTemplate;
@@ -358,7 +361,7 @@ public class MvcController {
     }
 
     // update Model so that View can access new main balance, overdraft balance, and logs
-    applyInterest(user);
+    // applyInterest(user);
     updateAccountInfo(user);
     return "account_info";
   }
@@ -712,6 +715,7 @@ public class MvcController {
       TestudoBankRepository.insertRowToCryptoLogsTable(jdbcTemplate, userID, cryptoToBuy, CRYPTO_HISTORY_BUY_ACTION, currentTime, cryptoAmountToBuy);
 
       updateAccountInfo(user);
+      applyMonthlyCryptoInterest(user, currentTime);   // add monthly interest
 
       return "account_info";
     } else {
@@ -804,10 +808,89 @@ public class MvcController {
    * @param user
    * @return "account_info" if interest applied. Otherwise, redirect to "welcome" page.
    */
-  public String applyInterest(@ModelAttribute("user") User user) {
+  public String applyInterest(@ModelAttribute("user") User user, String currentCryptoBuyDate) {
 
     return "welcome";
 
   }
 
+  /**
+   * Helper method that adds monthly interest to incentive a customer to continue 
+   * purchasing crypto. 
+   * 
+   * If a customer purchased crypto the previous month then, 1.5% interest will be
+   * added to their total deposit for that specific crypto.
+   * 
+   * @param user
+   * @return "account_info" if interest applied. Otherwise, redirect to "welcome" page.
+   */
+  public String applyMonthlyCryptoInterest(@ModelAttribute("user") User user, String currCryptoBuyDate) {
+    String cryptoType = user.getWhichCryptoToBuy();
+    
+    // date format: yyyy-MM-dd HH:mm:ss
+    String lastCryptoBuyDate = LAST_CRYPTO_PURCHASE_DATE_BY_SUPPORTED_CRYPTOCURRENCIES.get(cryptoType);
+    
+    /** 
+     * the buyCrypto helper method already checks:
+     * - if a supported cryptocurrency was bought
+     * - if the customer is not is overdraft
+     * - if the customer has an account and is logged in
+     * - if the customer is buying a valid (positive) amount of crypto
+     */
+
+    // the customer is buying this type of crypto for the first time
+    // so there will be no interest added to last month because there is no prior balance
+    if (lastCryptoBuyDate == null) {
+      LAST_CRYPTO_PURCHASE_DATE_BY_SUPPORTED_CRYPTOCURRENCIES.put(cryptoType, currCryptoBuyDate);   // set last crypto buy date
+      return "welcome";
+    }
+
+    // if account has a crypto buy for the past month
+    Boolean hadCryptoBuyLastMonth = hadCryptoBuyLastMonth(lastCryptoBuyDate, currCryptoBuyDate);
+    if (hadCryptoBuyLastMonth) {
+
+      // add interest
+      String userID = user.getUsername();
+      double cryptoBalance = TestudoBankRepository.getCustomerCryptoBalance(jdbcTemplate, userID, cryptoType).get();
+      double cryptoInterestToAdd = cryptoBalance * (1 - BALANCE_INTEREST_RATE);
+
+      user.setCryptoTransaction(true);
+      TestudoBankRepository.increaseCustomerCryptoBalance(jdbcTemplate, userID, cryptoType, cryptoInterestToAdd);
+
+      // record interest application in crypto transaction history
+      String cryptoInterestApplicationTime = SQL_DATETIME_FORMATTER.format(new java.util.Date());
+      TestudoBankRepository.insertRowToCryptoLogsTable(jdbcTemplate, userID, cryptoType, CRYPTO_HISTORY_APPLY_INTEREST_ACTION, cryptoInterestApplicationTime, cryptoInterestToAdd);
+      
+      // set last crypto buy date
+      LAST_CRYPTO_PURCHASE_DATE_BY_SUPPORTED_CRYPTOCURRENCIES.put(cryptoType, currCryptoBuyDate);
+      return "account_info";
+
+    } else {  // if an account did not buy crypto last month 
+      LAST_CRYPTO_PURCHASE_DATE_BY_SUPPORTED_CRYPTOCURRENCIES.put(cryptoType, currCryptoBuyDate);   // set last crypto buy date
+      return "welcome";
+    }
+  }
+
+  private Boolean hadCryptoBuyLastMonth(String lastCryptoBuyDate, String currCryptoBuyDate) {
+    Boolean hadCryptoBuyLastMonth = false;
+    
+    // date format: yyyy-MM-dd HH:mm:ss
+    int monthStartIndex = 5;
+    int monthEndIndex = 7;
+    int december = 12;
+
+    int lastCryptoBuyMonth = Integer.valueOf(lastCryptoBuyDate.substring(monthStartIndex, monthEndIndex));
+    int currCryptoBuyMonth = Integer.valueOf(currCryptoBuyDate.substring(monthStartIndex, monthEndIndex));
+
+    // check if the current month after the previous month
+    if (lastCryptoBuyMonth < currCryptoBuyMonth) {
+      hadCryptoBuyLastMonth = true;
+    } else {
+      if (lastCryptoBuyMonth == december && lastCryptoBuyMonth > currCryptoBuyMonth) { // in the case last month is december, still adds interest
+        hadCryptoBuyLastMonth = true;
+      }
+      hadCryptoBuyLastMonth = false;
+    }
+    return hadCryptoBuyLastMonth;
+  }
 }
